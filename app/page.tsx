@@ -70,7 +70,7 @@ function SignedInContent() {
         Click the button below and open this page in another window - this data
         is persisted in the Convex cloud database!
       </p>
-      <Button onClick={() => addNumber({ value: Math.floor(Math.random() * 10) })}>
+      <Button onClick={() => void addNumber({ value: Math.floor(Math.random() * 10) })}>
         Add a random number
       </Button>
       <p>
