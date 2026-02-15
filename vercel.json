@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
   "bunVersion": "1.x",
   "buildCommand": "bunx convex deploy --cmd 'bun run build'"
 }
