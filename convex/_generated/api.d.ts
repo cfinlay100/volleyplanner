@@ -9,6 +9,8 @@
  */
 
 import type * as freeAgents from "../freeAgents.js";
+import type * as peopleUtils from "../peopleUtils.js";
+import type * as registrations from "../registrations.js";
 import type * as sessions from "../sessions.js";
 import type * as teamMembers from "../teamMembers.js";
 import type * as teams from "../teams.js";
@@ -21,6 +23,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   freeAgents: typeof freeAgents;
+  peopleUtils: typeof peopleUtils;
+  registrations: typeof registrations;
   sessions: typeof sessions;
   teamMembers: typeof teamMembers;
   teams: typeof teams;

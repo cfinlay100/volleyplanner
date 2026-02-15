@@ -26,7 +26,7 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle className="flex items-center justify-between text-base">
                   {team.name}
-                  <Badge variant="secondary">{team.status}</Badge>
+                  <Badge variant="secondary">Captain</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -47,8 +47,8 @@ export default function DashboardPage() {
         <div className="space-y-2">
           {pendingInvites?.map((invite) => (
             <div key={invite._id} className="rounded border p-3 text-sm">
-              <p>{invite.name}</p>
-              <p className="text-muted-foreground">{invite.email}</p>
+              <p>Invite pending</p>
+              <p className="text-muted-foreground">{invite.weeklyStatus}</p>
               {invite.inviteToken && (
                 <Button asChild size="sm" variant="outline" className="mt-2">
                   <Link href={`/invite/${invite.inviteToken}`}>Respond to Invite</Link>
@@ -67,8 +67,8 @@ export default function DashboardPage() {
         <div className="grid gap-2">
           {memberships?.map((member) => (
             <div key={member._id} className="rounded border p-3 text-sm">
-              <p>{member.name}</p>
-              <p className="text-muted-foreground">{member.status}</p>
+              <p>{member.team?.name ?? "Team"}</p>
+              <p className="text-muted-foreground">{member.defaultWeeklyStatus}</p>
             </div>
           ))}
         </div>

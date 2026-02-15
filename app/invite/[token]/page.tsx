@@ -46,6 +46,10 @@ export default function InvitePage() {
           Session: {invite.session.day.toUpperCase()} - {invite.session.date}
         </p>
         <p>Captain: {invite.team.captainName}</p>
+        <p>
+          Invited player:{" "}
+          <span className="font-medium">{invite.member.person?.name ?? "Player"}</span>
+        </p>
         <div className="space-y-2">
           <Label htmlFor="name">Your name (optional)</Label>
           <Input id="name" value={name} onChange={(event) => setName(event.target.value)} />

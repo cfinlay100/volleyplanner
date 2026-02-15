@@ -1,71 +1,29 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
-
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-async function computeTeamStatus(ctx: MutationCtx, team: Doc<"teams">) {
-  const members = await ctx.db
-    .query("teamMembers")
-    .withIndex("by_teamId", (q) => q.eq("teamId", team._id))
-    .collect();
-  const confirmedCount = members.filter((member) => member.status === "confirmed").length;
-  if (confirmedCount < 3) {
-    return "forming" as const;
-  }
-
-  const session = await ctx.db.get(team.sessionId);
-  if (!session) {
-    return "forming" as const;
-  }
-
-  const teamsInSession = await ctx.db
-    .query("teams")
-    .withIndex("by_sessionId", (q) => q.eq("sessionId", team.sessionId))
-    .collect();
-
-  const confirmedTeams = teamsInSession
-    .filter((sessionTeam) => sessionTeam.status === "confirmed" || sessionTeam._id === team._id)
-    .sort((a, b) => a.createdAt - b.createdAt);
-  const rank = confirmedTeams.findIndex((sessionTeam) => sessionTeam._id === team._id);
-  if (rank >= session.maxTeams) {
-    return "waitlisted" as const;
-  }
-  return "confirmed" as const;
-}
-
-async function refreshTeamStatus(ctx: MutationCtx, teamId: Doc<"teams">["_id"]) {
-  const team = await ctx.db.get(teamId);
-  if (!team) {
-    return;
-  }
-  const status = await computeTeamStatus(ctx, team);
-  await ctx.db.patch(team._id, { status });
-}
+import { isValidEmail, normalizeEmail, upsertPerson } from "./peopleUtils";
 
 export const getByInviteToken = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     const member = await ctx.db
-      .query("teamMembers")
+      .query("sessionRegistrationMembers")
       .withIndex("by_inviteToken", (q) => q.eq("inviteToken", args.token))
       .first();
     if (!member) {
       return null;
     }
-    const team = await ctx.db.get(member.teamId);
+    const registration = await ctx.db.get(member.registrationId);
+    if (!registration) {
+      return null;
+    }
+    const team = await ctx.db.get(registration.teamId);
     if (!team) {
       return null;
     }
-    const session = await ctx.db.get(team.sessionId);
-    return { member, team, session };
+    const person = await ctx.db.get(member.personId);
+    const sessionRecord = await ctx.db.get(registration.sessionId);
+    return { member: { ...member, person }, team, session: sessionRecord };
   },
 });
 
@@ -77,32 +35,35 @@ export const respondToInvite = mutation({
   },
   handler: async (ctx, args) => {
     const member = await ctx.db
-      .query("teamMembers")
+      .query("sessionRegistrationMembers")
       .withIndex("by_inviteToken", (q) => q.eq("inviteToken", args.token))
       .first();
     if (!member) {
       throw new Error("Invite not found.");
     }
-    if (member.role !== "player") {
-      throw new Error("Only player invites can be responded to from this link.");
-    }
-    if (member.status !== "invited") {
+    if (member.inviteStatus !== "invited") {
       throw new Error("This invite has already been responded to.");
     }
 
     const identity = await ctx.auth.getUserIdentity();
-    const patch: Partial<Doc<"teamMembers">> = {
-      status: args.response,
+    const patch: Partial<Doc<"sessionRegistrationMembers">> = {
+      inviteStatus: args.response,
+      respondedAt: Date.now(),
     };
     if (args.name?.trim()) {
-      patch.name = args.name.trim();
+      const person = await ctx.db.get(member.personId);
+      if (person) {
+        await ctx.db.patch(person._id, { name: args.name.trim() });
+      }
     }
     if (identity?.subject) {
-      patch.clerkUserId = identity.subject;
+      const person = await ctx.db.get(member.personId);
+      if (person) {
+        await ctx.db.patch(person._id, { clerkUserId: identity.subject });
+      }
     }
 
     await ctx.db.patch(member._id, patch);
-    await refreshTeamStatus(ctx, member.teamId);
     return { ok: true };
   },
 });
@@ -134,26 +95,22 @@ export const addMember = mutation({
     if (!isValidEmail(email)) {
       throw new Error("Player email is invalid.");
     }
+    const personId = await upsertPerson(ctx, { name, email });
     const existing = await ctx.db
-      .query("teamMembers")
+      .query("teamRosterMembers")
       .withIndex("by_teamId", (q) => q.eq("teamId", args.teamId))
       .collect();
-    if (existing.some((member) => member.email === email)) {
+    if (existing.some((member) => member.personId === personId && !member.isArchived)) {
       throw new Error("This player is already on the team.");
     }
-    if (existing.length >= 4) {
-      throw new Error("Team already has 4 players.");
-    }
-
-    const memberId = await ctx.db.insert("teamMembers", {
+    const memberId = await ctx.db.insert("teamRosterMembers", {
       teamId: args.teamId,
-      name,
-      email,
+      personId,
       role: "player",
-      status: "invited",
-      inviteToken: crypto.randomUUID(),
+      defaultWeeklyStatus: "active",
+      isArchived: false,
+      createdAt: Date.now(),
     });
-    await refreshTeamStatus(ctx, args.teamId);
     return memberId;
   },
 });
@@ -161,7 +118,7 @@ export const addMember = mutation({
 export const removeMember = mutation({
   args: {
     teamId: v.id("teams"),
-    memberId: v.id("teamMembers"),
+    memberId: v.id("teamRosterMembers"),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -184,8 +141,7 @@ export const removeMember = mutation({
       throw new Error("Cannot remove captain.");
     }
 
-    await ctx.db.delete(args.memberId);
-    await refreshTeamStatus(ctx, args.teamId);
+    await ctx.db.patch(args.memberId, { isArchived: true, defaultWeeklyStatus: "not_invited" });
     return { ok: true };
   },
 });
@@ -193,10 +149,16 @@ export const removeMember = mutation({
 export const listByTeam = query({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
-    return await ctx.db
-      .query("teamMembers")
+    const roster = await ctx.db
+      .query("teamRosterMembers")
       .withIndex("by_teamId", (q) => q.eq("teamId", args.teamId))
       .collect();
+    return await Promise.all(
+      roster.map(async (member) => ({
+        ...member,
+        person: await ctx.db.get(member.personId),
+      }))
+    );
   },
 });
 
@@ -204,15 +166,38 @@ export const listMyPendingInvites = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity?.email) {
+    if (!identity?.email && !identity?.subject) {
       return [];
     }
-    const email = normalizeEmail(identity.email);
-    const members = await ctx.db
-      .query("teamMembers")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .collect();
-    return members.filter((member) => member.status === "invited");
+
+    const people = identity.subject
+      ? await ctx.db
+          .query("people")
+          .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject))
+          .collect()
+      : [];
+    if (identity.email) {
+      const byEmail = await ctx.db
+        .query("people")
+        .withIndex("by_email", (q) => q.eq("email", normalizeEmail(identity.email!)))
+        .collect();
+      for (const person of byEmail) {
+        if (!people.some((p) => p._id === person._id)) {
+          people.push(person);
+        }
+      }
+    }
+    const invites = await Promise.all(
+      people.map(async (person) =>
+        await ctx.db
+          .query("sessionRegistrationMembers")
+          .withIndex("by_personId", (q) => q.eq("personId", person._id))
+          .collect()
+      )
+    );
+    return invites
+      .flat()
+      .filter((member) => member.inviteStatus === "invited");
   },
 });
 
@@ -226,22 +211,66 @@ export const listMyMemberships = query({
 
     const byUserId = identity.subject
       ? await ctx.db
-          .query("teamMembers")
-          .filter((q) => q.eq(q.field("clerkUserId"), identity.subject))
+          .query("people")
+          .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject))
           .collect()
       : [];
     const byEmail = identity.email
       ? await ctx.db
-          .query("teamMembers")
+          .query("people")
           .withIndex("by_email", (q) => q.eq("email", normalizeEmail(identity.email!)))
           .collect()
       : [];
 
     const dedup = new Map<string, (typeof byUserId)[number]>();
-    for (const member of [...byUserId, ...byEmail]) {
-      dedup.set(member._id, member);
+    for (const person of [...byUserId, ...byEmail]) {
+      dedup.set(person._id, person);
     }
 
-    return Array.from(dedup.values());
+    const memberships = await Promise.all(
+      Array.from(dedup.values()).map(async (person) => {
+        const rosterEntries = await ctx.db
+          .query("teamRosterMembers")
+          .withIndex("by_personId", (q) => q.eq("personId", person._id))
+          .collect();
+        return await Promise.all(
+          rosterEntries.map(async (entry) => ({
+            ...entry,
+            team: await ctx.db.get(entry.teamId),
+            person,
+          }))
+        );
+      })
+    );
+    return memberships.flat();
+  },
+});
+
+export const updateDefaultWeeklyStatus = mutation({
+  args: {
+    rosterMemberId: v.id("teamRosterMembers"),
+    defaultWeeklyStatus: v.union(
+      v.literal("active"),
+      v.literal("inactive"),
+      v.literal("not_invited")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required.");
+    }
+    const roster = await ctx.db.get(args.rosterMemberId);
+    if (!roster) {
+      throw new Error("Roster member not found.");
+    }
+    const team = await ctx.db.get(roster.teamId);
+    if (!team || team.captainUserId !== identity.subject) {
+      throw new Error("Only captain can update defaults.");
+    }
+    await ctx.db.patch(args.rosterMemberId, {
+      defaultWeeklyStatus: args.defaultWeeklyStatus,
+    });
+    return { ok: true };
   },
 });

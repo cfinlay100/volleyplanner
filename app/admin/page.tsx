@@ -97,13 +97,15 @@ export default function AdminPage() {
             {sessionDetail.teams.length === 0 && (
               <p className="text-sm text-muted-foreground">No teams registered.</p>
             )}
-            {sessionDetail.teams.map((team) => (
+            {sessionDetail.teams
+              .filter((team): team is NonNullable<typeof team> => team !== null)
+              .map((team) => (
               <div key={team._id} className="rounded border p-3 text-sm">
                 <p className="font-medium">{team.name}</p>
                 <p className="text-muted-foreground">
                   Captain: {team.captainName} ({team.captainEmail})
                 </p>
-                <Badge variant="secondary">{team.status}</Badge>
+                <Badge variant="secondary">{team.registration.status}</Badge>
               </div>
             ))}
           </CardContent>

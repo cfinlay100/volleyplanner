@@ -17,6 +17,7 @@ export default function TeamDetailPage() {
   const team = useQuery(api.teams.getTeam, { teamId });
   const addMember = useMutation(api.teamMembers.addMember);
   const removeMember = useMutation(api.teamMembers.removeMember);
+  const updateDefaultWeeklyStatus = useMutation(api.teamMembers.updateDefaultWeeklyStatus);
   const updateTeam = useMutation(api.teams.updateTeam);
 
   const [teamName, setTeamName] = useState("");
@@ -34,16 +35,11 @@ export default function TeamDetailPage() {
     );
   }
 
-  const inviteBase = typeof window !== "undefined" ? window.location.origin : "";
-
   return (
     <div className="space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">{team.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          Session: {team.session?.day.toUpperCase()} - {team.session?.date}
-        </p>
-        <Badge variant="secondary">{team.status}</Badge>
+        <p className="text-sm text-muted-foreground">Captain: {team.captainName}</p>
       </div>
 
       {team.canManage && (
@@ -87,25 +83,39 @@ export default function TeamDetailPage() {
             >
               <div>
                 <p className="font-medium">
-                  {member.name} {member.role === "captain" ? "(Captain)" : ""}
+                  {member.person?.name} {member.role === "captain" ? "(Captain)" : ""}
                 </p>
-                <p className="text-muted-foreground">{member.email}</p>
+                <p className="text-muted-foreground">{member.person?.email}</p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">{member.status}</Badge>
-                {team.canManage && member.inviteToken && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
+                <Badge variant="secondary">{member.defaultWeeklyStatus}</Badge>
+                {team.canManage && (
+                  <select
+                    className="rounded-md border bg-background px-2 py-1 text-xs"
+                    value={member.defaultWeeklyStatus}
+                    onChange={(event) => {
+                      const value = event.target.value as "active" | "inactive" | "not_invited";
                       void (async () => {
-                        await navigator.clipboard.writeText(`${inviteBase}/invite/${member.inviteToken}`);
-                        toast.success("Invite link copied.");
+                        try {
+                          await updateDefaultWeeklyStatus({
+                            rosterMemberId: member._id as Id<"teamRosterMembers">,
+                            defaultWeeklyStatus: value,
+                          });
+                          toast.success("Default status updated.");
+                        } catch (error) {
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : "Unable to update default status."
+                          );
+                        }
                       })();
                     }}
                   >
-                    Copy Invite
-                  </Button>
+                    <option value="active">Active by default</option>
+                    <option value="inactive">Inactive by default</option>
+                    <option value="not_invited">Not invited by default</option>
+                  </select>
                 )}
                 {team.canManage && member.role !== "captain" && (
                   <Button
@@ -114,8 +124,8 @@ export default function TeamDetailPage() {
                     onClick={() => {
                       void (async () => {
                         try {
-                          await removeMember({ teamId, memberId: member._id });
-                          toast.success("Member removed.");
+                          await removeMember({ teamId, memberId: member._id as Id<"teamRosterMembers"> });
+                          toast.success("Member archived.");
                         } catch (error) {
                           toast.error(error instanceof Error ? error.message : "Unable to remove member.");
                         }
@@ -151,7 +161,7 @@ export default function TeamDetailPage() {
                     await addMember({ teamId, name: newName, email: newEmail });
                     setNewName("");
                     setNewEmail("");
-                    toast.success("Invite sent.");
+                    toast.success("Member added to roster.");
                   } catch (error) {
                     toast.error(error instanceof Error ? error.message : "Unable to add member.");
                   }

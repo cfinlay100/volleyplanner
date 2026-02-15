@@ -93,14 +93,17 @@ export const listUpcoming = query({
 
     const withCounts = await Promise.all(
       upcoming.map(async (session) => {
-        const teams = await ctx.db
-          .query("teams")
+        const registrations = await ctx.db
+          .query("sessionRegistrations")
           .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
           .collect();
+        const activeRegistrations = registrations.filter(
+          (registration) => registration.status !== "cancelled"
+        );
         return {
           ...session,
-          teamCount: teams.length,
-          spotsRemaining: Math.max(0, session.maxTeams - teams.length),
+          teamCount: activeRegistrations.length,
+          spotsRemaining: Math.max(0, session.maxTeams - activeRegistrations.length),
         };
       })
     );
@@ -117,26 +120,41 @@ export const getSession = query({
       return null;
     }
 
-    const teams = await ctx.db
-      .query("teams")
+    const registrations = await ctx.db
+      .query("sessionRegistrations")
       .withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
       .collect();
 
+    const activeRegistrations = registrations.filter(
+      (registration) => registration.status !== "cancelled"
+    );
     const teamsWithMembers = await Promise.all(
-      teams.map(async (team) => {
-        const members = await ctx.db
-          .query("teamMembers")
-          .withIndex("by_teamId", (q) => q.eq("teamId", team._id))
+      activeRegistrations.map(async (registration) => {
+        const team = await ctx.db.get(registration.teamId);
+        if (!team) {
+          return null;
+        }
+        const registrationMembers = await ctx.db
+          .query("sessionRegistrationMembers")
+          .withIndex("by_registrationId", (q) => q.eq("registrationId", registration._id))
           .collect();
-        return { ...team, members };
+        const members = await Promise.all(
+          registrationMembers.map(async (member) => ({
+            ...member,
+            person: await ctx.db.get(member.personId),
+          }))
+        );
+        return { ...team, registration, members };
       })
     );
 
     return {
       ...session,
-      teamCount: teams.length,
-      spotsRemaining: Math.max(0, session.maxTeams - teams.length),
-      teams: teamsWithMembers.sort((a, b) => a.createdAt - b.createdAt),
+      teamCount: activeRegistrations.length,
+      spotsRemaining: Math.max(0, session.maxTeams - activeRegistrations.length),
+      teams: teamsWithMembers
+        .filter((team) => team !== null)
+        .sort((a, b) => (a!.createdAt ?? 0) - (b!.createdAt ?? 0)),
     };
   },
 });

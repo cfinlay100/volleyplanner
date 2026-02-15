@@ -7,10 +7,15 @@ import { api } from "@/convex/_generated/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Check, LogOut } from "lucide-react";
+import { toast } from "sonner";
 
 export default function SessionsPage() {
   const ensureUpcoming = useMutation(api.sessions.ensureUpcomingSessionsPublic);
+  const leaveSession = useMutation(api.registrations.leaveSession);
   const sessions = useQuery(api.sessions.listUpcoming);
+  const myTeams = useQuery(api.teams.listMyTeams);
+  const myRegistrations = useQuery(api.registrations.listMyRegistrations);
 
   useEffect(() => {
     void ensureUpcoming({ weeksAhead: 6 });
@@ -57,9 +62,59 @@ export default function SessionsPage() {
                       <Button asChild size="sm">
                         <Link href={`/sessions/${session._id}`}>View Session</Link>
                       </Button>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/teams/new?session=${session._id}`}>Create Team</Link>
-                      </Button>
+                      {(() => {
+                        const myRegistration = myRegistrations?.find(
+                          (registration) => registration.sessionId === session._id
+                        );
+                        if (!myRegistration) {
+                          return (
+                            <Button asChild size="sm" variant="outline">
+                              <Link
+                                href={
+                                  myTeams && myTeams.length > 0
+                                    ? `/sessions/${session._id}`
+                                    : `/teams/new?session=${session._id}`
+                                }
+                              >
+                                {myTeams && myTeams.length > 0 ? "Join Session" : "Create Team"}
+                              </Link>
+                            </Button>
+                          );
+                        }
+                        return (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="group"
+                            onClick={() => {
+                              if (!window.confirm("Leave this session and remove your team?")) {
+                                return;
+                              }
+                              void (async () => {
+                                try {
+                                  await leaveSession({ registrationId: myRegistration._id });
+                                  toast.success("You left the session.");
+                                } catch (error) {
+                                  toast.error(
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Unable to leave session."
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            <span className="flex items-center gap-1 group-hover:hidden">
+                              <Check className="h-4 w-4" />
+                              Joined
+                            </span>
+                            <span className="hidden items-center gap-1 text-destructive group-hover:flex">
+                              <LogOut className="h-4 w-4" />
+                              Leave session
+                            </span>
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
