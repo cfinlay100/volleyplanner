@@ -8,7 +8,10 @@
  * @module
  */
 
-import type * as myFunctions from "../myFunctions.js";
+import type * as freeAgents from "../freeAgents.js";
+import type * as sessions from "../sessions.js";
+import type * as teamMembers from "../teamMembers.js";
+import type * as teams from "../teams.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +20,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  myFunctions: typeof myFunctions;
+  freeAgents: typeof freeAgents;
+  sessions: typeof sessions;
+  teamMembers: typeof teamMembers;
+  teams: typeof teams;
 }>;
 
 /**

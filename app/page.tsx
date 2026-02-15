@@ -1,96 +1,69 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import {
-  Authenticated,
-  Unauthenticated,
-  useMutation,
-  useQuery,
-} from "convex/react";
+import Link from "next/link";
+import { useEffect } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Code } from "@/components/typography/code";
-import { Link } from "@/components/typography/link";
-import { SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
-import { StickyHeader } from "@/components/layout/sticky-header";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export default function Home() {
+  const ensureUpcoming = useMutation(api.sessions.ensureUpcomingSessionsPublic);
+  const sessions = useQuery(api.sessions.listUpcoming);
+
+  useEffect(() => {
+    void ensureUpcoming({ weeksAhead: 6 });
+  }, [ensureUpcoming]);
+
   return (
-    <>
-      <StickyHeader className="flex justify-between items-center px-4 py-2">
-        <h1 className="font-semibold">Convex + Next.js + Clerk</h1>
-        <div className="flex gap-2 items-center">
-          <Authenticated>
-            <UserButton />
-          </Authenticated>
-          <Unauthenticated>
-            <SignInButton mode="modal">
-              <Button variant="ghost">Sign in</Button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <Button>Sign up</Button>
-            </SignUpButton>
-          </Unauthenticated>
+    <div className="space-y-8">
+      <section className="space-y-4 rounded-lg border p-6">
+        <h1 className="text-3xl font-bold tracking-tight">Volleyball Tournament Signups</h1>
+        <p className="text-muted-foreground">
+          Captains create teams, invite players, and reserve a session on Tuesday,
+          Wednesday, or Thursday. Each session supports up to 24 teams across 12 courts.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild>
+            <Link href="/sessions">Browse Sessions</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/teams/new">Create Team</Link>
+          </Button>
+          <Button asChild variant="secondary">
+            <Link href="/free-agent">Join as Free Agent</Link>
+          </Button>
         </div>
-      </StickyHeader>
+      </section>
 
-      <main className="container py-8 space-y-8">
-        <h2 className="text-2xl font-bold">Convex + Next.js + Clerk Auth</h2>
-
-        <Unauthenticated>
-          <p>Click one of the buttons in the top right corner to sign in.</p>
-        </Unauthenticated>
-
-        <Authenticated>
-          <SignedInContent />
-        </Authenticated>
-      </main>
-    </>
-  );
-}
-
-function SignedInContent() {
-  const { viewer, numbers } =
-    useQuery(api.myFunctions.listNumbers, { count: 10 }) ?? {};
-  const addNumber = useMutation(api.myFunctions.addNumber);
-
-  if (viewer === undefined || numbers === undefined) {
-    return (
-      <>
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-20 w-full" />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <p>Welcome {viewer ?? "N/A"}!</p>
-      <p>
-        Click the button below and open this page in another window - this data
-        is persisted in the Convex cloud database!
-      </p>
-      <Button onClick={() => void addNumber({ value: Math.floor(Math.random() * 10) })}>
-        Add a random number
-      </Button>
-      <p>
-        Numbers:{" "}
-        {numbers?.length === 0
-          ? "Click the button!"
-          : numbers?.join(", ") ?? "..."}
-      </p>
-      <p>
-        Edit <Code>convex/myFunctions.ts</Code> to change your backend
-      </p>
-      <p>
-        Edit <Code>app/page.tsx</Code> to change your frontend
-      </p>
-      <p>
-        Check out{" "}
-        <Link href="https://docs.convex.dev" target="_blank" rel="noopener">
-          Convex docs
-        </Link>
-      </p>
-    </>
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Upcoming Session Availability</h2>
+        {!sessions && <p className="text-sm text-muted-foreground">Loading sessions...</p>}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {sessions?.slice(0, 6).map((session) => (
+            <Card key={session._id}>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between text-base">
+                  <span>{session.day.toUpperCase()}</span>
+                  <Badge variant={session.spotsRemaining > 0 ? "default" : "secondary"}>
+                    {session.spotsRemaining} spots left
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p>Date: {session.date}</p>
+                <p>
+                  Teams: {session.teamCount} / {session.maxTeams}
+                </p>
+                <Button asChild size="sm" className="w-full">
+                  <Link href={`/sessions/${session._id}`}>View Session</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
