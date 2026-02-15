@@ -276,3 +276,29 @@ export const updateDefaultWeeklyStatus = mutation({
     return { ok: true };
   },
 });
+
+export const backfillRosterDisplayData = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const roster = await ctx.db.query("teamRosterMembers").collect();
+    let updated = 0;
+    for (const member of roster) {
+      const person = await ctx.db.get(member.personId);
+      if (!person) {
+        continue;
+      }
+      const patch: { name?: string; email?: string } = {};
+      if (!member.name || member.name.trim().length === 0) {
+        patch.name = person.name;
+      }
+      if (!member.email || member.email.trim().length === 0) {
+        patch.email = person.email;
+      }
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(member._id, patch);
+        updated += 1;
+      }
+    }
+    return { updated };
+  },
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 import { z } from "zod";
@@ -28,7 +28,7 @@ const createTeamSchema = z.object({
     .max(3, "Add up to 3 players."),
 });
 
-export default function NewTeamPage() {
+function NewTeamPageContent() {
   const { user } = useUser();
   const { isAuthenticated: isConvexAuthenticated, isLoading: isConvexAuthLoading } =
     useConvexAuth();
@@ -254,5 +254,13 @@ export default function NewTeamPage() {
         </Card>
       </SignedIn>
     </div>
+  );
+}
+
+export default function NewTeamPage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-muted-foreground">Loading team form...</div>}>
+      <NewTeamPageContent />
+    </Suspense>
   );
 }

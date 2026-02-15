@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-export default function FreeAgentPage() {
+function FreeAgentPageContent() {
   const searchParams = useSearchParams();
   const initialSession = searchParams.get("session") ?? "";
   const sessions = useQuery(api.sessions.listUpcoming);
@@ -86,5 +86,13 @@ export default function FreeAgentPage() {
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+export default function FreeAgentPage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-muted-foreground">Loading form...</div>}>
+      <FreeAgentPageContent />
+    </Suspense>
   );
 }
