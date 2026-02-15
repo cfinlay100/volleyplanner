@@ -97,6 +97,8 @@ export const createTeam = mutation({
     await ctx.db.insert("teamRosterMembers", {
       teamId,
       personId: captainPersonId,
+      name: identity.name ?? "Captain",
+      email: captainEmail,
       role: "captain",
       defaultWeeklyStatus: "active",
       isArchived: false,
@@ -112,6 +114,8 @@ export const createTeam = mutation({
         return await ctx.db.insert("teamRosterMembers", {
           teamId,
           personId,
+          name: player.name,
+          email: player.email,
           role: "player",
           defaultWeeklyStatus: "active",
           isArchived: false,
@@ -183,10 +187,21 @@ export const getTeam = query({
     const rosterWithPeople = await Promise.all(
       roster
         .filter((member) => !member.isArchived)
-        .map(async (member) => ({
-          ...member,
-          person: await ctx.db.get(member.personId),
-        }))
+        .map(async (member) => {
+          const person = await ctx.db.get(member.personId);
+          return {
+            ...member,
+            person,
+            displayName:
+              person?.name ??
+              member.name ??
+              (member.role === "captain" ? team.captainName : "Unknown player"),
+            displayEmail:
+              person?.email ??
+              member.email ??
+              (member.role === "captain" ? team.captainEmail : ""),
+          };
+        })
     );
     const registrations = await ctx.db
       .query("sessionRegistrations")
@@ -247,10 +262,15 @@ export const listMyTeamsWithRoster = query({
         const membersWithPeople = await Promise.all(
           members
             .filter((member) => !member.isArchived)
-            .map(async (member) => ({
-              ...member,
-              person: await ctx.db.get(member.personId),
-            }))
+            .map(async (member) => {
+              const person = await ctx.db.get(member.personId);
+              return {
+                ...member,
+                person,
+                displayName: person?.name ?? member.name ?? "",
+                displayEmail: person?.email ?? member.email ?? "",
+              };
+            })
         );
         const registrations = await ctx.db
           .query("sessionRegistrations")

@@ -83,9 +83,12 @@ export default function TeamDetailPage() {
             >
               <div>
                 <p className="font-medium">
-                  {member.person?.name} {member.role === "captain" ? "(Captain)" : ""}
+                  {(member.displayName ?? member.person?.name ?? "Unknown player")}{" "}
+                  {member.role === "captain" ? "(Captain)" : ""}
                 </p>
-                <p className="text-muted-foreground">{member.person?.email}</p>
+                <p className="text-muted-foreground">
+                  {member.displayEmail ?? member.person?.email ?? ""}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="secondary">{member.defaultWeeklyStatus}</Badge>

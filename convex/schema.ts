@@ -39,6 +39,8 @@ export default defineSchema(
     teamRosterMembers: defineTable({
       teamId: v.id("teams"),
       personId: v.id("people"),
+      name: v.optional(v.string()),
+      email: v.optional(v.string()),
       role: v.union(v.literal("captain"), v.literal("player")),
       defaultWeeklyStatus: v.union(
         v.literal("active"),

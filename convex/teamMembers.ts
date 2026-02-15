@@ -106,6 +106,8 @@ export const addMember = mutation({
     const memberId = await ctx.db.insert("teamRosterMembers", {
       teamId: args.teamId,
       personId,
+      name,
+      email,
       role: "player",
       defaultWeeklyStatus: "active",
       isArchived: false,
